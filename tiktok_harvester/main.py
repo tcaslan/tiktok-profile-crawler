@@ -91,11 +91,9 @@ def main():
                     print(f"Skipping user '{username}' due to missing URL or invalid username.")
                     continue
                 
-                # Implement a delay to be respectful to TikTok's servers
-                # And to reduce the chance of being flagged as a bot.
-                # Random delay between 5 to 15 seconds.
-                delay = random.uniform(5, 10)
-                print(f"Waiting for {delay:.2f} seconds before visiting profile...")
+                # Fixed delay before visiting profile.
+                delay = 2 # Fixed 2-second delay
+                print(f"Waiting for {delay} seconds before visiting profile...")
                 time.sleep(delay)
 
                 profile_page_data = scrape_profile_data(driver, profile_url)
