@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+venv/
+.env
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Output - if you don't want to commit example outputs
+# tiktok_harvester/output/*.csv 
+# Consider if you want to commit the .gitkeep file or not if you ignore the whole output dir.
+# For now, let's keep .gitkeep by not ignoring the whole output dir, just specific file types if needed.
+
+# macOS
+.DS_Store
