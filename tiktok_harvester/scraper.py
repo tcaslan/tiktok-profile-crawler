@@ -148,23 +148,47 @@ def scroll_and_extract_video_data_via_js(driver):
     javascript_to_execute = """
     return (async function () {
         // "Başka sonuç yok" elementi göründüğünde duracak scroll fonksiyonu
-        async function scrollUntilNoMoreResults(waitMs = 1000) { // Increased waitMs slightly
+        async function scrollUntilNoMoreResults(waitMs = 1500) { // Increased waitMs
             let scrollCount = 0;
-            const maxScrolls = 50; // Safety break for very long pages or if selector fails
-            console.log('Starting scroll function...');
-            while (!document.querySelector('.css-t7wus4-DivNoMoreResultsContainer.eegew6e3') && scrollCount < maxScrolls) {
+            const maxScrolls = 70; // Increased maxScrolls for potentially longer pages
+            let noNewContentStreak = 0;
+            let lastHeight = 0;
+            console.log('Starting enhanced scroll function...');
+
+            while (scrollCount < maxScrolls) {
+                if (document.querySelector('.css-t7wus4-DivNoMoreResultsContainer.eegew6e3')) {
+                    console.log('"No more results" container found. Stopping scroll.');
+                    break;
+                }
+
+                lastHeight = document.body.scrollHeight;
                 window.scrollTo(0, document.body.scrollHeight);
-                console.log('Scrolled to bottom. Waiting ' + waitMs + 'ms...');
-                await new Promise(res => setTimeout(res, waitMs));
                 scrollCount++;
+                console.log(`Scroll attempt ${scrollCount}/${maxScrolls}. Waiting ${waitMs}ms...`);
+                await new Promise(res => setTimeout(res, waitMs));
+
+                let newHeight = document.body.scrollHeight;
+                if (newHeight === lastHeight) {
+                    noNewContentStreak++;
+                    console.log(`Page height (${newHeight}) did not change. Streak: ${noNewContentStreak}`);
+                    if (noNewContentStreak >= 3) { // If height hasn't changed for 3 consecutive scrolls
+                        console.log('Page height has not changed for 3 attempts. Assuming end of results or issue.');
+                        break;
+                    }
+                } else {
+                    noNewContentStreak = 0; // Reset streak if new content loaded
+                }
+                 // Check again for "no more results" after waiting, as it might appear after content loads
+                if (document.querySelector('.css-t7wus4-DivNoMoreResultsContainer.eegew6e3')) {
+                    console.log('"No more results" container found after wait. Stopping scroll.');
+                    break;
+                }
             }
+
             if (scrollCount >= maxScrolls) {
                 console.log('Max scrolls reached, stopping scroll.');
-            } else if (document.querySelector('.css-t7wus4-DivNoMoreResultsContainer.eegew6e3')) {
-                console.log('"No more results" container found.');
-            } else {
-                console.log('Scroll loop finished for other reasons.');
             }
+            console.log('Scroll loop finished.');
         }
 
         try {
@@ -172,27 +196,24 @@ def scroll_and_extract_video_data_via_js(driver):
             console.log('Scrolling complete. Starting scrape operation...');
         } catch (scrollError) {
             console.error('Error during scrolling:', scrollError);
-            // Optionally, allow manual scroll then proceed
-            // alert('Automatic scrolling encountered an error. Please scroll manually to the end, then click OK.');
         }
 
-
-        // Scrape işlemi
-        // These selectors are based on the user's initial script. They might need updates.
+        console.log('Attempting to select elements for scraping...');
         const userElements = document.querySelectorAll('p[data-e2e="search-card-user-unique-id"]');
+        console.log('[JS] Found ' + userElements.length + ' userElements with selector "p[data-e2e=\\"search-card-user-unique-id\\"]"');
+        
         const likeElements = document.querySelectorAll('strong[data-e2e="video-views"]');
-        // The videoLinkElements selector needs to be specific to the video card's main link
-        // to ensure it aligns with userElements and likeElements.
-        // A common structure is that the user element is within an <a> tag that is the main link for the card.
-        // Let's try to get the href from the parent of the userElement if it's an 'a', or a known video link selector.
-        // For now, using a broad selector for video links, assuming one per card.
-        const videoCardLinks = document.querySelectorAll('a[href*="/video/"]'); // This might grab too many or too few.
+        console.log('[JS] Found ' + likeElements.length + ' likeElements with selector "strong[data-e2e=\\"video-views\\"]"');
+        
+        // This is a broad selector, used as a fallback in the loop if specific card link isn't found.
+        const videoCardLinks = document.querySelectorAll('a[href*="/video/"]');
+        console.log('[JS] Found ' + videoCardLinks.length + ' general videoCardLinks with selector "a[href*=\\"/video/\\"]"');
 
         const results = [];
-        console.log(`Found ${userElements.length} user elements, ${likeElements.length} like elements, ${videoCardLinks.length} video card links.`);
+        if (userElements.length === 0) {
+            console.warn('[JS] No userElements found. Scraping will likely yield no results. Check selectors and page content in browser.');
+        }
 
-        // It's safer to iterate based on a common parent "card" element if possible.
-        // For now, assuming userElements is the most reliable count for "video cards".
         userElements.forEach((userElement, index) => {
             try {
                 const username = userElement.textContent.trim();
@@ -230,7 +251,7 @@ def scroll_and_extract_video_data_via_js(driver):
             }
         });
         
-        console.log('Scraping complete. Results:', results.length);
+        console.log('[JS] Scraping complete. Total results collected in JS:', results.length);
         return results; // Return the data
     })();
     """

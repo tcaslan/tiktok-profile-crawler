@@ -2,19 +2,19 @@
 
 import time
 import random
+import os # Needed for path operations
 from tiktok_harvester.scraper import (
     initialize_driver,
     close_driver,
     search_tiktok_videos,
     scroll_and_extract_video_data_via_js,
-    scrape_profile_data # Changed from scrape_profile_bio
+    scrape_profile_data
 )
 from tiktok_harvester.utils import extract_emails_from_text, write_to_csv
 
 def main():
     print("Starting TikTok Email Harvester...")
-    driver = None  # Initialize driver to None
-    all_collected_data = []
+    driver = None
 
     try:
         keywords_input = input("Enter TikTok search keyword(s), separated by commas: ")
@@ -40,16 +40,17 @@ def main():
 
         for keyword in keywords:
             print(f"\nProcessing keyword: '{keyword}'")
+            current_keyword_data = [] # Data for the current keyword
             
-            if not search_tiktok_videos(driver, keyword): # Changed function call
+            if not search_tiktok_videos(driver, keyword):
                 print(f"Failed to search for videos with keyword '{keyword}'. Skipping.")
                 continue
 
             print(f"Successfully navigated to video search results for '{keyword}'.")
             print("Now executing JavaScript to scroll and extract video data (usernames, likes, video URLs)...")
             
-            # Give the page a moment to settle before executing complex JS
-            time.sleep(3)
+            print("Waiting 5 seconds for page to settle before executing JS...")
+            time.sleep(5) # Give page a bit more time to settle
             
             video_data_list = scroll_and_extract_video_data_via_js(driver)
 
@@ -59,18 +60,15 @@ def main():
 
             print(f"Found {len(video_data_list)} video data items for '{keyword}'. Now processing unique users from this data...")
 
-            # Process unique usernames from the video data
             unique_usernames = set()
             users_to_process = []
             for video_item in video_data_list:
-                # 'username' from JS is actually the creator's username
                 creator_username = video_item.get('username')
                 if creator_username and creator_username != 'N/A' and creator_username not in unique_usernames:
                     unique_usernames.add(creator_username)
                     users_to_process.append({
                         'username': creator_username,
                         'profile_url': f"https://www.tiktok.com/@{creator_username}",
-                        # Optionally, carry over first video URL or like count if needed for CSV
                         'related_video_url': video_item.get('videoUrl', 'N/A'),
                         'related_video_likes': video_item.get('likeCount', 'N/A')
                     })
@@ -91,7 +89,6 @@ def main():
                     print(f"Skipping user '{username}' due to missing URL or invalid username.")
                     continue
                 
-                # Fixed delay before visiting profile.
                 delay = 2 # Fixed 2-second delay
                 print(f"Waiting for {delay} seconds before visiting profile...")
                 time.sleep(delay)
@@ -121,33 +118,46 @@ def main():
                 else:
                     print(f"Could not retrieve any profile page data for {username}.")
                 
-                all_collected_data.append({
+                current_keyword_data.append({ # Changed from all_collected_data
                     'keyword_searched': keyword,
                     'username': username,
                     'profile_url': profile_url,
                     'source_video_url': user_info.get('related_video_url', 'N/A'),
-                    'source_video_likes': user_info.get('related_video_likes', 'N/A'), # This is "like count (from video search)"
+                    'source_video_likes': user_info.get('related_video_likes', 'N/A'),
                     'bio_text': bio_text,
-                    'emails_found': ', '.join(emails_found) if emails_found else "N/A", # This is "bioda mail varsa mail"
-                    'profile_following_count': profile_following, # This is "takip edilen"
-                    'profile_followers_count': profile_followers, # This is "takipçi"
-                    'profile_likes_count': profile_likes # This is "beğeni sayısı (profile likes)"
+                    'emails_found': ', '.join(emails_found) if emails_found else "N/A",
+                    'profile_following_count': profile_following,
+                    'profile_followers_count': profile_followers,
+                    'profile_likes_count': profile_likes
                 })
             
             print(f"Finished processing users derived from videos for keyword '{keyword}'.")
 
-        if all_collected_data:
-            output_filename = "tiktok_harvester/output/tiktok_user_data.csv" # Renamed for clarity
-            headers = [
-                'keyword_searched', 'username', 'profile_url',
-                'source_video_url', 'source_video_likes',
-                'bio_text', 'emails_found',
-                'profile_following_count', 'profile_followers_count', 'profile_likes_count'
-            ]
-            write_to_csv(all_collected_data, filename=output_filename, headers=headers)
-            print(f"\nAll processing complete. Data saved to {output_filename}")
-        else:
-            print("\nNo data collected from any keywords.")
+            # Save data for the current keyword
+            if current_keyword_data:
+                # Sanitize keyword for filename
+                safe_keyword_filename = "".join(c if c.isalnum() or c in (' ', '_') else '' for c in keyword).rstrip().replace(' ', '_')
+                if not safe_keyword_filename:
+                    safe_keyword_filename = "untitled_keyword_search" # Fallback filename
+                
+                # Ensure output directory exists (though utils.write_to_csv also does this)
+                output_dir = "tiktok_harvester/output/"
+                os.makedirs(output_dir, exist_ok=True)
+                
+                output_filename = os.path.join(output_dir, f"{safe_keyword_filename}.csv")
+                
+                headers = [
+                    'keyword_searched', 'username', 'profile_url', 
+                    'source_video_url', 'source_video_likes', 
+                    'bio_text', 'emails_found', 
+                    'profile_following_count', 'profile_followers_count', 'profile_likes_count'
+                ]
+                write_to_csv(current_keyword_data, filename=output_filename, headers=headers)
+                print(f"Data for keyword '{keyword}' saved to {output_filename}")
+            else:
+                print(f"No data collected for keyword '{keyword}' to save.")
+        
+        print("\nAll keywords processed.")
 
     except KeyboardInterrupt:
         print("\nProcess interrupted by user (Ctrl+C).")
